@@ -55,6 +55,9 @@ input{font:16px "IBM Plex Sans KR",sans-serif;padding:10px 12px;min-height:44px;
 button{font:600 16px "IBM Plex Sans KR",sans-serif;min-height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--c,var(--ink));background:var(--c,var(--ink));color:var(--plate);cursor:pointer;width:100%;margin-top:12px}
 button.x{width:auto;min-height:30px;padding:0 8px;margin:0 0 0 6px;font-size:12px;background:transparent;color:var(--mute);border-color:var(--line)}
 button.x.arm{color:var(--red);border-color:var(--red)}
+.dt{position:relative;display:block}
+.dt .ph{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--mute);font-size:15px;pointer-events:none;white-space:nowrap}
+.dt:not(.has) input{color:transparent}.dt.has .ph{display:none}
 .note{font-size:13px;color:var(--mute);margin-top:8px;min-height:1.5em}
 table{width:100%;border-collapse:collapse;font-size:15px}
 th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
@@ -89,6 +92,7 @@ small.w{display:block;color:var(--red);font-size:12px;white-space:normal;max-wid
  .stat div{padding-top:3px;border-top-width:1px}.stat b{font-size:16px}.stat small{font-size:11px}
  .fields{gap:6px;margin-top:8px}label{font-size:12px;gap:2px}
  input{font-size:16px;padding:6px;min-height:40px}
+ .dt .ph{font-size:12px;left:6px}
  input[type=datetime-local]{font-size:12px;padding:6px 4px;-webkit-appearance:none;appearance:none}
  button{margin-top:8px;font-size:15px;padding:0 6px}
  .note{font-size:11px;margin-top:4px}
@@ -151,7 +155,7 @@ small.w{display:block;color:var(--red);font-size:12px;white-space:normal;max-wid
 <script>
 {
 const H=36e5,DAY=11,HOUR=10,MIN=0,LKEY='meterfix.v5',NAME={f:'1층',b:'지하'};
-const seedB={s01:['2025-11-11T10:00',1583.1],s02:['2025-12-11T10:00',1779.7],s03:['2026-01-11T11:15',1981.7],s04:['2026-02-11T15:36',2206.4],s05:['2026-03-11T10:00',2428.1],s06:['2026-04-11T10:29',2676.1],s07:['2026-05-11T06:39',2899.9],s08:['2026-06-11T08:14',3123.5],s09:['2026-07-11T10:31',3420.6],s10:['2026-08-11T10:22',3786.8],s11:['2026-09-11T04:31',4080.5],s12:['2026-10-11T09:18',4234.7],s13:['2026-11-13T12:14',4421.0]};
+const seedB={s01:['2025-11-11T10:00',1583.1],s02:['2025-12-11T10:00',1779.7],s03:['2026-01-11T11:15',1981.7],s04:['2026-02-11T15:36',2206.4],s05:['2026-03-11T10:00',2428.1],s06:['2026-04-11T10:29',2676.1],s07:['2026-05-11T06:39',2899.9],s08:['2026-06-11T08:14',3123.5],s09:['2026-07-11T10:31',3420.6],s10:['2026-08-11T10:22',3786.8],s11:['2026-09-11T04:31',4080.5],s12:['2026-10-11T09:18',4234.7],s13:['2026-11-13T12:14',4421.5]};
 const seedBill={'2025-12':{a:74050,k:439},'2026-01':{a:84360,k:479},'2026-02':{a:85390,k:483},'2026-03':{a:76630,k:449},'2026-04':{a:87710,k:492},'2026-05':{a:78430,k:456},'2026-06':{a:91570,k:507},'2026-07':{a:147470,fk:429,fa:95570,ba:51900,memo:1},'2026-08':{a:239750,k:1053},'2026-09':{a:165580,k:830},'2026-10':{a:79460,k:460}};
 const seed={bill:seedBill,f:{},b:Object.fromEntries(Object.entries(seedB).map(([k,[t,v]])=>[k,{t,v}]))};
 let D={f:{},b:{},bill:{}},db=null;
@@ -224,12 +228,13 @@ function panel(m){const n=NAME[m];
    <div class="mlab" id="lc-${m}">11일 10:00 보정 숫자</div><div class="big" id="dc-${m}"></div>
    <div class="stat"><div><b id="sg-${m}">–</b><small>기준 시각과 차이</small></div><div><b id="su-${m}">–</b><small>이번 달 사용량</small></div></div>
    <div class="fields">
-     <label>촬영 일시<input type="datetime-local" id="it-${m}" value="${toLocal(new Date())}"></label>
-     <label>계량기 숫자 (빨간 칸=소수점)<input type="number" id="iv-${m}" step="0.1" inputmode="decimal" placeholder="예: 4421.0"></label>
+     <label>촬영 일시<span class="dt"><input type="datetime-local" id="it-${m}"><span class="ph">사진 찍은 시각 입력</span></span></label>
+     <label>계량기 숫자 (빨간 칸=소수점)<input type="number" id="iv-${m}" step="0.1" inputmode="decimal" placeholder="예: 1234.5"></label>
    </div>
    <button type="button" id="sv-${m}">${n} 검침 저장</button>
    <div class="note" id="nt-${m}"></div>`;
-  $('it-'+m).addEventListener('input',()=>preview(m));
+  const it=$('it-'+m),ph=()=>it.parentNode.classList.toggle('has',!!it.value);
+  it.addEventListener('input',()=>{ph();preview(m)});it.addEventListener('change',ph);
   $('iv-'+m).addEventListener('input',()=>preview(m));
   $('sv-'+m).addEventListener('click',()=>{const tv=$('it-'+m).value,vv=parseFloat($('iv-'+m).value);
     if(!tv||isNaN(vv)){toast('촬영 일시와 숫자를 넣어 주세요');return}
@@ -244,7 +249,7 @@ function panel(m){const n=NAME[m];
         toast(`이번 달 ${r.use.toFixed(0)}kWh는 최근 평균 ${avg.toFixed(0)}kWh와 차이가 큽니다. 숫자를 확인하세요`);
         setTimeout(()=>{delete btn.dataset.ok;btn.textContent=`${n} 검침 저장`},6000);return}
       delete btn.dataset.ok;btn.textContent=`${n} 검침 저장`}
-    add(m,{t:tv,v:vv,at:Date.now()});$('iv-'+m).value='';toast(`${n} 검침을 저장했습니다`)});
+    add(m,{t:tv,v:vv,at:Date.now()});$('iv-'+m).value='';$('it-'+m).value='';$('it-'+m).parentNode.classList.remove('has');toast(`${n} 검침을 저장했습니다`)});
 }
 function preview(m){
   const tv=$('it-'+m).value,vv=parseFloat($('iv-'+m).value),rows=chain(m);let r=null;
