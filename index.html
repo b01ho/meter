@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>검침 보정기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=Oswald:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* ▼▼ Firebase 설정: 콘솔에서 복사한 값으로 바꾸세요. 비워 두면 이 기기에만 저장됩니다. ▼▼ */
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  databaseURL: "",
+  projectId: "",
+  appId: ""
+};
+/* ▲▲ 여기까지 ▲▲ */
+</script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-database-compat.js"></script>
+<style>
+/* VOICE: calm, exact, a fair tool both tenant and landlord read together
+   IDEA: two mechanical kWh meters side by side on the wall — black drums, red tenths
+   PICTURE: 1층 and 지하 meter plates next to each other, raw → corrected drums
+   COLOUR and TYPE: meter-plate white / graphite, drum black, meter red accent; Oswald drums + IBM Plex Sans KR
+   LAYOUT: two plates in one row, then side-by-side history, then monthly comparison with bars */
+:root{color-scheme:light dark;--bg:light-dark(#eceeec,#141617);--plate:light-dark(#fbfbf9,#1e2123);--ink:light-dark(#16191b,#eef0ee);--mute:light-dark(#5d656a,#9aa3a8);--line:light-dark(#d3d7d6,#30353a);--red:#d3262c;--f:light-dark(#2f5d8a,#7fb0e0);--ok:light-dark(#1f6f5c,#6fd0b4)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "IBM Plex Sans KR",system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(18px,3.5vw,40px) max(4vw,14px);max-width:1120px;margin:0 auto}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.1;margin:0 0 6px;text-wrap:balance}
+h2{font-size:21px;margin:0 0 12px}
+p{margin:0 0 10px}.mute{color:var(--mute);font-size:14px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--mute)}
+.live i{width:9px;height:9px;border-radius:50%;background:var(--mute)}
+.live.on i{background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 25%,transparent)}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.plate{background:var(--plate);border:1px solid var(--line);border-radius:18px;padding:clamp(14px,2.4vw,22px);box-shadow:0 10px 30px -18px rgba(0,0,0,.45);border-top:6px solid var(--c)}
+.plate h2{color:var(--c);margin-bottom:10px}
+.mlab{font-size:13px;color:var(--mute);margin:10px 0 5px}
+.drums{display:flex;gap:3px;background:#2a2d30;padding:6px;border-radius:9px;width:max-content;max-width:100%}
+.drums span{font:600 clamp(24px,3.6vw,40px)/1 Oswald,sans-serif;color:#f3f3ee;background:linear-gradient(#000,#2b2d2f 45%,#1a1b1c 55%,#000);width:clamp(24px,3.3vw,36px);text-align:center;padding:6px 0;border-radius:3px}
+.drums span.t{background:linear-gradient(#7a0f12,var(--red) 45%,#b81f24 55%,#6a0c0f)}
+.big .drums{background:#16181a;outline:3px solid var(--red);outline-offset:2px}
+.stat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}
+.stat div{border-top:2px solid var(--line);padding-top:6px}
+.stat b{display:block;font:600 20px/1.2 Oswald,sans-serif;white-space:nowrap}
+.stat small{color:var(--mute);font-size:13px}
+.fields{display:grid;gap:10px;margin-top:14px}
+label{font-size:14px;color:var(--mute);display:grid;gap:4px}
+input{font:16px "IBM Plex Sans KR",sans-serif;padding:10px 12px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:100%}
+:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+button{font:600 16px "IBM Plex Sans KR",sans-serif;min-height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--c,var(--ink));background:var(--c,var(--ink));color:var(--plate);cursor:pointer;width:100%;margin-top:12px}
+button.x{width:auto;min-height:30px;padding:0 8px;margin:0 0 0 6px;font-size:12px;background:transparent;color:var(--mute);border-color:var(--line)}
+button.x.arm{color:var(--red);border-color:var(--red)}
+.note{font-size:13px;color:var(--mute);margin-top:8px;min-height:1.5em}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:13px;color:var(--mute);font-weight:600}
+th.f,td.f{color:var(--f)}th.b,td.b{color:var(--red)}
+thead tr:first-child th{border-bottom:0;text-align:center}
+td:first-child,th:first-child{text-align:left}
+td.sep,th.sep{border-left:1px solid var(--line)}
+th.lt,td.lt{text-align:left;font-weight:600}
+tr.mf td{border-bottom:1px dashed var(--line)}
+td.mo{vertical-align:middle;font-weight:600;border-bottom:1px solid var(--line)!important}
+.scroll{overflow-x:auto}
+.empty{color:var(--mute);text-align:center!important;padding:18px}
+input.bill{width:104px;min-height:38px;padding:6px 8px;text-align:right}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;min-width:90px;background:var(--line)}
+.bar i{background:var(--f)}.bar i+i{background:var(--red)}
+small.t{display:block;color:var(--mute);font-size:12px}
+small.w{display:block;color:var(--red);font-size:12px;white-space:normal;max-width:140px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw}
+#toast.on{opacity:1}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+@media(max-width:700px){
+ .band{padding:14px 10px}h1{font-size:24px}
+ .pair{gap:8px;margin-top:10px}
+ .plate{padding:10px 8px;border-radius:14px;border-top-width:5px}
+ .plate h2{font-size:17px;margin-bottom:4px}
+ .mlab{font-size:11px;margin:6px 0 3px;line-height:1.3}
+ .drums{gap:2px;padding:4px;border-radius:6px}
+ .drums span{font-size:clamp(15px,4.6vw,22px);width:clamp(17px,5.2vw,26px);padding:4px 0;border-radius:2px}
+ .big .drums{outline-width:2px}
+ .stat{grid-template-columns:minmax(0,1fr);gap:4px;margin-top:8px}
+ .stat div{padding-top:3px;border-top-width:1px}.stat b{font-size:16px}.stat small{font-size:11px}
+ .fields{gap:6px;margin-top:8px}label{font-size:12px;gap:2px}
+ input{font-size:16px;padding:6px;min-height:40px}
+ input[type=datetime-local]{font-size:12px;padding:6px 4px;-webkit-appearance:none;appearance:none}
+ button{margin-top:8px;font-size:15px;padding:0 6px}
+ .note{font-size:11px;margin-top:4px}
+ table{font-size:13px}
+}
+</style>
+</head>
+<body>
+<div class="band">
+  <h1>계량기 검침 보정기</h1>
+  <p class="mute">언제 찍든 매월 11일 10:00 기준 숫자로 자동 환산합니다. <span class="live" id="live"><i></i><span id="liveT">연결 중…</span></span></p>
+
+  <div class="pair">
+    <section class="plate" id="p-f" style="--c:var(--f)"></section>
+    <section class="plate" id="p-b" style="--c:var(--red)"></section>
+  </div>
+</div>
+
+<div class="band">
+  <h2>지난 검침 내역</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>월</th><th class="lt">구분</th><th>촬영 시각</th><th>찍은 숫자</th><th>보정 숫자</th><th>사용량 kWh</th><th></th></tr>
+      </thead>
+      <tbody id="tbHist"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="band">
+  <h2>월별 사용량 비교</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>월</th><th>고지서 kWh</th><th class="b">지하 kWh</th><th class="f">1층 kWh</th><th>고지서 전기요금</th><th class="f">1층 금액</th><th class="b">지하 금액</th></tr></thead>
+      <tbody id="tbSum"></tbody>
+    </table>
+  </div>
+  <p class="mute" style="margin-top:10px">금액 계산(집주인 방식): 1층 사용량 = 고지서 총사용량 − 지하 사용량. 1층·지하 사용량으로 한전 주택용 요금(누진제)을 세대별로 따로 계산한 뒤, 그 비율로 실제 고지서 금액을 나눕니다(지하 10원 미만 절사, 나머지는 1층). 7·8월 여름 요금 구간은 검침 기간의 일수 비율만큼 반영합니다. 보정 방법: 직전 달 보정 숫자와 이번에 찍은 숫자를 직선으로 이어, 그 기간의 평균 사용 속도로 11일 10:00의 값을 구합니다. 일찍 찍어 덜 잡힌 사용량은 다음 달 시작값이 같이 낮아져 다음 달에 그대로 더해지므로, 두 달 합계는 실제 사용량과 같습니다.</p>
+</div>
+
+<div class="band">
+  <h2>촬영 시각이 기준과 다를 때 예상 오차</h2>
+  <p>보정은 "직전 검침부터 이번 촬영까지 전기를 고르게 썼다"고 가정합니다. 실제 사용이 고르지 않은 만큼만 오차가 생기고, 지하 금액은 1kWh당 봄·가을 약 170원, 여름 약 290원씩 달라집니다(2026년 고지서로 계산).</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>기준 시각(11일 10:00)과 차이</th><th>예상 오차 kWh</th><th>봄·가을 금액</th><th>여름(7·8월) 금액</th></tr></thead>
+      <tbody>
+        <tr><td>6시간 이내 (예: 11일 04:00)</td><td>0.5~1</td><td>약 100~200원</td><td>약 150~300원</td></tr>
+        <tr><td><b>24시간 전후</b> (10일 10:00 ~ 12일 10:00)</td><td>±1.5~3</td><td><b>약 ±250~500원</b></td><td><b>약 ±700~1,400원</b></td></tr>
+        <tr><td>2~3일 (예: 13일 19:00)</td><td>±2~8</td><td>약 ±300~900원</td><td>최대 약 ±2,400원</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:12px"><b>오차는 다음 달에 상쇄됩니다.</b> 이번 달 보정 숫자가 다음 달의 시작 숫자가 되기 때문에, 이번 달에 더 잡히거나 덜 잡힌 사용량은 다음 달에 정확히 반대로 빠지거나 더해집니다. 두 달을 합치면 실제 사용량과 같고, 남는 차이는 누진 구간 경계에 따른 몇십 원 수준입니다.</p>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+{
+const H=36e5,DAY=11,HOUR=10,MIN=0,LKEY='meterfix.v5',NAME={f:'1층',b:'지하'};
+const seedB={s01:['2025-11-11T10:00',1583.1],s02:['2025-12-11T10:00',1779.7],s03:['2026-01-11T11:15',1981.7],s04:['2026-02-11T15:36',2206.4],s05:['2026-03-11T10:00',2428.1],s06:['2026-04-11T10:29',2676.1],s07:['2026-05-11T06:39',2899.9],s08:['2026-06-11T08:14',3123.5],s09:['2026-07-11T10:31',3420.6],s10:['2026-08-11T10:22',3786.8],s11:['2026-09-11T04:31',4080.5],s12:['2026-10-11T09:18',4234.7],s13:['2026-11-13T12:14',4421.0]};
+const seedBill={'2025-12':{a:74050,k:439},'2026-01':{a:84360,k:479},'2026-02':{a:85390,k:483},'2026-03':{a:76630,k:449},'2026-04':{a:87710,k:492},'2026-05':{a:78430,k:456},'2026-06':{a:91570,k:507},'2026-07':{a:147470,fk:429,fa:95570,ba:51900,memo:1},'2026-08':{a:239750,k:1053},'2026-09':{a:165580,k:830},'2026-10':{a:79460,k:460}};
+const seed={bill:seedBill,f:{},b:Object.fromEntries(Object.entries(seedB).map(([k,[t,v]])=>[k,{t,v}]))};
+let D={f:{},b:{},bill:{}},db=null;
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const fmtT=d=>`${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const toLocal=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const ym=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const f1=v=>v==null?'–':v.toFixed(1);
+function toast(m){const e=$('toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2000)}
+function target(t){let T=new Date(t.getFullYear(),t.getMonth(),DAY,HOUR,MIN);
+  if(t-T>15*24*H)T=new Date(t.getFullYear(),t.getMonth()+1,DAY,HOUR,MIN);
+  else if(T-t>15*24*H)T=new Date(t.getFullYear(),t.getMonth()-1,DAY,HOUR,MIN);return T}
+function step(prev,t,v){const T=target(t);
+  if(!prev)return{t,v,T,c:v,use:null,first:true};
+  const span=(t-prev.T)/H,rate=span>0?(v-prev.c)/span:0,c=span>0?prev.c+rate*((T-prev.T)/H):v;
+  return{t,v,T,c,rate,use:c-prev.c}}
+/* 계량기 한 바퀴(9999.9→0000.0) 대비: 숫자가 크게 줄면 10000을 더해 계산 */
+const unroll=(prevAdj,v)=>{let x=v;if(prevAdj!=null)while(x<prevAdj-5000)x+=10000;return x};
+function chain(m){const r=Object.entries(D[m]||{}).filter(([,x])=>x&&x.t&&!isNaN(new Date(x.t))&&isFinite(+x.v)).map(([id,x])=>({id,t:new Date(x.t),v:+x.v})).sort((a,b)=>a.t-b.t);
+  const out=[];let p=null,adj=null;
+  for(const x of r){const va=unroll(adj,x.v);adj=va;let s=step(p,x.t,va);
+    /* 빠진 달이 있으면 같은 사용 속도로 그 달의 기준 숫자를 추정해 끼워 넣음 */
+    if(p&&!s.first){let Tm=new Date(p.T.getFullYear(),p.T.getMonth()+1,DAY,HOUR,MIN);
+      while(Tm<s.T){const c=p.c+s.rate*((Tm-p.T)/H);const v={T:Tm,c,use:c-p.c,est:true,id:null};out.push(v);p=v;Tm=new Date(Tm.getFullYear(),Tm.getMonth()+1,DAY,HOUR,MIN)}
+      s=step(p,x.t,va)}
+    p=Object.assign(s,{id:x.id,raw:x.v});out.push(p)}
+  return out}
+function drums(val){const d=Math.max(0,val||0).toFixed(1).replace('.','').padStart(5,'0').slice(-5);
+  return`<div class="drums">${d.split('').map((c,i)=>`<span class="${i===4?'t':''}">${c}</span>`).join('')}</div>`}
+
+/* 저장소: Firebase 실시간 DB, 없으면 이 기기 localStorage */
+const local={load(){try{return JSON.parse(localStorage.getItem(LKEY))}catch(e){return null}},save(){try{localStorage.setItem(LKEY,JSON.stringify(D))}catch(e){}}};
+function setLive(on,txt){$('live').classList.toggle('on',on);$('liveT').textContent=txt}
+let BLOCK=false;
+function add(m,rec){if(BLOCK){toast('공유 서버에 연결되지 않아 저장할 수 없습니다');return}if(db){db.ref('meter/'+m).push(rec).catch(()=>toast('저장 실패: 인터넷 연결을 확인하세요'))}
+  else{D[m]['l'+Date.now()]=rec;local.save();renderAll()}}
+/* 한전 주택용(저압) 요금표 — 세대별 '단독 요금'을 구해 그 비율로 실제 고지서를 나눔 */
+const RATE={base:[910,1600,7300],unit:[120,214.6,307.3],lim:[200,400],limS:[300,450],clim:9,fuel:5,vat:.1,fund:.027};
+function one(u,summer){const[l1,l2]=summer?RATE.limS:RATE.lim,[p1,p2,p3]=RATE.unit;let base,e;
+  if(u<=l1){base=RATE.base[0];e=u*p1}else if(u<=l2){base=RATE.base[1];e=l1*p1+(u-l1)*p2}else{base=RATE.base[2];e=l1*p1+(l2-l1)*p2+(u-l2)*p3}
+  const s=base+Math.floor(e)+u*RATE.clim+u*RATE.fuel;return Math.floor((s+Math.round(s*RATE.vat)+Math.floor(s*RATE.fund/10)*10)/10)*10}
+/* 고지서 검산: 총사용량(가구수 2)으로 한전 요금을 다시 계산 */
+function billCalc(k,sf){const part=s=>{const h=k/2,[l1,l2]=s?RATE.limS:RATE.lim,[p1,p2,p3]=RATE.unit;
+    return h<=l1?[RATE.base[0],h*p1]:h<=l2?[RATE.base[1],l1*p1+(h-l1)*p2]:[RATE.base[2],l1*p1+(l2-l1)*p2+(h-l2)*p3]};
+  const[bs,es]=part(true),[bn,en]=part(false);const s=Math.floor(2*(sf*bs+(1-sf)*bn))+Math.floor(2*(sf*es+(1-sf)*en))+k*RATE.clim+k*RATE.fuel;
+  return Math.floor((s+Math.round(s*RATE.vat)+Math.floor(s*RATE.fund/10)*10)/10)*10}
+const tariff=(u,sf)=>sf*one(u,true)+(1-sf)*one(u,false);
+function summerFrac(k){const y=+k.slice(0,4),m=+k.slice(5),end=new Date(y,m-1,DAY),st=new Date(y,m-2,DAY);let n=0,t=0;
+  for(let d=new Date(st);d<end;d.setDate(d.getDate()+1)){t++;if(d.getMonth()===6||d.getMonth()===7)n++}return t?n/t:0}
+function setBill(k,f,v){if(BLOCK){toast('공유 서버에 연결되지 않아 저장할 수 없습니다');renderAll();return}if(db){db.ref(`meter/bill/${k}/${f}`).set(v>0?v:null)}else{const o=Object.assign({},bill(k));if(v>0)o[f]=v;else delete o[f];D.bill[k]=o;local.save();renderAll()}}
+const bill=k=>{const x=(D.bill||{})[k];return typeof x==='number'?{a:x}:(x||{})};
+function del(m,id){if(BLOCK){toast('공유 서버에 연결되지 않아 삭제할 수 없습니다');return}if(db){db.ref(`meter/${m}/${id}`).remove()}else{delete D[m][id];local.save();renderAll()}}
+function start(){
+  const ok=typeof firebase!=='undefined'&&FIREBASE_CONFIG.databaseURL;
+  if(ok){try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database()}catch(e){db=null}}
+  if(db){
+    db.ref('.info/connected').on('value',s=>setLive(!!s.val(),s.val()?'실시간 공유 중':'연결 끊김 · 재연결 중'));
+    db.ref('meter').on('value',s=>{const v=s.val();
+      if(!v){db.ref('meter').set(seed);return}
+      D={f:v.f||{},b:v.b||{},bill:v.bill||{}};renderAll()},()=>setLive(false,'읽기 권한 없음 · DB 규칙을 확인하세요'));
+  }else if(FIREBASE_CONFIG.databaseURL){BLOCK=true;setLive(false,'공유 서버 연결 실패 · 새로고침하세요 (저장 불가)');renderAll()
+  }else{D=local.load()||JSON.parse(JSON.stringify(seed));D.bill=D.bill||{};setLive(false,'공유 설정 전 · 이 기기에만 저장');renderAll()}
+}
+
+function panel(m){const n=NAME[m];
+  $('p-'+m).innerHTML=`<h2>${n} 계량기</h2>
+   <div class="mlab" id="lr-${m}">찍은 숫자</div><div id="dr-${m}"></div>
+   <div class="mlab" id="lc-${m}">11일 10:00 보정 숫자</div><div class="big" id="dc-${m}"></div>
+   <div class="stat"><div><b id="sg-${m}">–</b><small>기준 시각과 차이</small></div><div><b id="su-${m}">–</b><small>이번 달 사용량</small></div></div>
+   <div class="fields">
+     <label>촬영 일시<input type="datetime-local" id="it-${m}" value="${toLocal(new Date())}"></label>
+     <label>계량기 숫자 (빨간 칸=소수점)<input type="number" id="iv-${m}" step="0.1" inputmode="decimal" placeholder="예: 4421.0"></label>
+   </div>
+   <button type="button" id="sv-${m}">${n} 검침 저장</button>
+   <div class="note" id="nt-${m}"></div>`;
+  $('it-'+m).addEventListener('input',()=>preview(m));
+  $('iv-'+m).addEventListener('input',()=>preview(m));
+  $('sv-'+m).addEventListener('click',()=>{const tv=$('it-'+m).value,vv=parseFloat($('iv-'+m).value);
+    if(!tv||isNaN(vv)){toast('촬영 일시와 숫자를 넣어 주세요');return}
+    const tk=ym(target(new Date(tv)));if(Object.values(D[m]).some(x=>x&&x.t&&ym(target(new Date(x.t)))===tk)){toast(`${+tk.slice(5)}월 ${n} 검침이 이미 있습니다. 내역에서 삭제 후 다시 저장하세요`);return}
+    if(new Date(tv)-Date.now()>H){toast('촬영 일시가 미래입니다. 날짜를 확인하세요');return}
+    const rows=chain(m),t=new Date(tv),prior=rows.filter(x=>x.T<target(t)),last=prior[prior.length-1],lr=[...prior].reverse().find(x=>!x.est);
+    if(last){const r=step(last,t,unroll(lr?lr.v:null,vv));
+      if(r.use<0){toast('지난 검침보다 숫자가 작습니다. 다시 확인하세요');return}
+      const us=prior.filter(x=>x.use!=null).slice(-3).map(x=>x.use),avg=us.length?us.reduce((a,b)=>a+b,0)/us.length:0;
+      const btn=$('sv-'+m);
+      if(avg>0&&(r.use>avg*2||r.use<avg*0.4)&&!btn.dataset.ok){btn.dataset.ok=1;btn.textContent='확인 후 한 번 더 누르면 저장';
+        toast(`이번 달 ${r.use.toFixed(0)}kWh는 최근 평균 ${avg.toFixed(0)}kWh와 차이가 큽니다. 숫자를 확인하세요`);
+        setTimeout(()=>{delete btn.dataset.ok;btn.textContent=`${n} 검침 저장`},6000);return}
+      delete btn.dataset.ok;btn.textContent=`${n} 검침 저장`}
+    add(m,{t:tv,v:vv,at:Date.now()});$('iv-'+m).value='';toast(`${n} 검침을 저장했습니다`)});
+}
+function preview(m){
+  const tv=$('it-'+m).value,vv=parseFloat($('iv-'+m).value),rows=chain(m);let r=null;
+  if(tv&&!isNaN(vv)){const t=new Date(tv),prior=rows.filter(x=>x.T<target(t)),last=prior[prior.length-1]||null,lr=[...prior].reverse().find(x=>!x.est);
+    r=step(last,t,unroll(lr?lr.v:null,vv));r.raw=vv;r.live=true}
+  else if(rows.length)r=rows[rows.length-1];
+  $('dr-'+m).innerHTML=drums(r&&(r.raw??r.v));$('dc-'+m).innerHTML=drums(r&&r.c);
+  if(!r){['sg-','su-'].forEach(p=>$(p+m).textContent='–');$('lr-'+m).textContent='찍은 숫자';$('lc-'+m).textContent='11일 10:00 보정 숫자';$('nt-'+m).textContent='아직 기록이 없습니다. 첫 검침을 저장하세요.';return}
+  const gap=(r.T-r.t)/H;
+  $('lr-'+m).textContent=`찍은 숫자 · ${fmtT(r.t)}`;$('lc-'+m).textContent=`보정 숫자 · ${fmtT(r.T)}`;
+  $('sg-'+m).textContent=Math.abs(gap)<0.05?'정시':(gap>0?gap.toFixed(1)+'시간 일찍':(-gap).toFixed(1)+'시간 늦게');
+  $('su-'+m).textContent=r.use==null?'시작값':r.use.toFixed(1)+' kWh';
+  $('nt-'+m).textContent=r.live?(r.first?'이전 기록이 없어 시작값으로 저장됩니다.':`미리보기 · 시간당 ${r.rate.toFixed(2)}kWh로 보정`):`최근 저장된 ${r.T.getMonth()+1}월 검침`;
+}
+function renderAll(){
+  preview('f');preview('b');
+  const by={f:{},b:{}};for(const m of['f','b'])for(const x of chain(m))by[m][ym(x.T)]=x;
+  const HIDE=['2025-11'];
+  const months=[...new Set([...Object.keys(by.f),...Object.keys(by.b)])].filter(k=>!HIDE.includes(k)).sort().reverse();
+  const row=(m,x)=>`<td class="lt ${m}">${NAME[m]}</td>`+(x&&x.est?`<td>추정</td><td>–</td><td>${(x.c%10000).toFixed(1)}</td><td class="${m}"><b>${x.use.toFixed(1)}</b></td><td></td>`:x?`<td>${fmtT(x.t)}</td><td>${x.raw.toFixed(1)}</td><td>${(x.c%10000).toFixed(1)}</td><td class="${m}"><b>${x.use==null?'시작':x.use.toFixed(1)}</b></td><td><button class="x" data-m="${m}" data-id="${esc(x.id)}">삭제</button></td>`:`<td>–</td><td>–</td><td>–</td><td>–</td><td></td>`);
+  $('tbHist').innerHTML=months.length?months.map(k=>`<tr class="mf"><td rowspan="2" class="mo">${k.slice(2,4)}.${+k.slice(5)}월</td>${row('f',by.f[k])}</tr><tr class="mb">${row('b',by.b[k])}</tr>`).join(''):`<tr><td colspan="7" class="empty">검침 기록이 아직 없습니다.</td></tr>`;
+  const bm=[...new Set([...months,...Object.keys(D.bill||{})])].filter(k=>!HIDE.includes(k)).sort().reverse();
+  const inp=(k,f,v)=>`<input class="bill" type="number" inputmode="numeric" data-k="${esc(k)}" data-f="${f}" value="${v||''}" placeholder="입력">`;
+  $('tbSum').innerHTML=bm.length?bm.map(k=>{const o=bill(k),xb=by.b[k],xf=by.f[k];
+    const b=xb&&xb.use!=null?Math.round(xb.use):null;
+    const a=o.k&&b!=null?o.k-b:(o.fk??(xf&&xf.use!=null?Math.round(xf.use):null));
+    let ca=null,cb=null,warn='';
+    if(!o.memo&&o.k&&o.a){const sf=summerFrac(k),ex=billCalc(o.k,sf);if(Math.abs(ex-o.a)>(sf>0?o.a*.005:10))warn=`<small class="w">⚠ 검산 ${ex.toLocaleString()}원 · 고지서 값 또는 요금표 확인</small>`}
+    if(o.memo){ca=o.fa;cb=o.ba}else if(o.a&&a!=null&&b!=null&&a>=0){const sf=summerFrac(k),A=tariff(a,sf),B=tariff(b,sf);if(A+B>0){cb=Math.floor(o.a*B/(A+B)/10)*10;ca=o.a-cb}}
+    return`<tr><td>${esc(k.slice(2,4))}.${+k.slice(5)}월</td><td>${inp(k,'k',o.k)}</td><td class="b">${b??'–'}</td><td class="f">${a??'–'}</td><td>${inp(k,'a',o.a)}${warn}</td><td class="f"><b>${ca==null?'–':ca.toLocaleString()+'원'}</b></td><td class="b"><b>${cb==null?'–':cb.toLocaleString()+'원'}</b></td></tr>`}).join('')
+    :`<tr><td colspan="7" class="empty">기록이 쌓이면 여기에 표시됩니다.</td></tr>`;
+}
+document.addEventListener('change',e=>{const i=e.target.closest('input.bill');if(!i)return;setBill(i.dataset.k,i.dataset.f,Math.round(+i.value||0));toast('고지서 값을 저장했습니다')});
+document.addEventListener('click',e=>{const b=e.target.closest('button.x');if(!b)return;
+  if(!b.classList.contains('arm')){b.classList.add('arm');b.textContent='확인';setTimeout(()=>{b.classList.remove('arm');b.textContent='삭제'},3000);return}
+  del(b.dataset.m,b.dataset.id);toast('삭제했습니다')});
+panel('f');panel('b');start();
+}
+</script>
+</body>
+</html>
